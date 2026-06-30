@@ -102,6 +102,33 @@ Proxy is running in the background (pid 12345).
 Log file:           <config-dir>/cpx.log
 ```
 
+也可以不启动服务，单独查看两种客户端格式的 API Key 和 Base URL：
+
+```bash
+cpx api
+```
+
+```text
+OpenAI Compatible:
+API Key:  <LOCAL_API_KEY>
+Base URL: http://127.0.0.1:4000/v1
+
+Anthropic Compatible:
+API Key:  <LOCAL_API_KEY>
+Base URL: http://127.0.0.1:4000
+```
+
+查看当前 GitHub Copilot 登录账号：
+
+```bash
+cpx whoami
+```
+
+```text
+GitHub Login:       <github-login>
+GitHub User ID:     <github-user-id>
+```
+
 默认的 `cpx start` 不会阻塞当前终端。实时日志会写入配置目录下的 `cpx.log`。
 
 如果你想在当前终端前台运行并直接看 uvicorn 日志，可以使用：

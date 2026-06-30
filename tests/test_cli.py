@@ -115,6 +115,85 @@ def test_cpx_login_runs_device_flow(monkeypatch, tmp_path) -> None:
     assert calls == [True]
 
 
+def test_cpx_whoami_prints_current_github_account(monkeypatch, tmp_path, capsys) -> None:
+    prepare_config(monkeypatch, tmp_path)
+    access_token = tmp_path / "access-token"
+    access_token.write_text("saved-token", encoding="utf-8")
+    calls: list[dict[str, object]] = []
+
+    class FakeAuthenticator:
+        access_token_file = str(access_token)
+        api_key_file = str(tmp_path / "api-key.json")
+
+        def get_access_token(self) -> str:
+            return "saved-token"
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"login": "octocat", "id": 12345}
+
+    def fake_get(url: str, headers: dict[str, str], timeout: int) -> FakeResponse:
+        calls.append({"url": url, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr(cli, "github_copilot_authenticator", lambda: FakeAuthenticator())
+    monkeypatch.setattr(cli.httpx, "get", fake_get)
+
+    cli.main(["whoami"])
+
+    output = capsys.readouterr().out
+    assert "GitHub Login:       octocat" in output
+    assert "GitHub User ID:     12345" in output
+    assert calls == [
+        {
+            "url": "https://api.github.com/user",
+            "headers": {
+                "accept": "application/vnd.github+json",
+                "authorization": "token saved-token",
+                "user-agent": "GithubCopilot/1.155.0",
+            },
+            "timeout": 30,
+        }
+    ]
+
+
+def test_cpx_whoami_requires_login_when_access_token_is_missing(
+    monkeypatch, tmp_path, capsys
+) -> None:
+    prepare_config(monkeypatch, tmp_path)
+
+    class FakeAuthenticator:
+        access_token_file = str(tmp_path / "missing-access-token")
+        api_key_file = str(tmp_path / "api-key.json")
+
+    monkeypatch.setattr(cli, "github_copilot_authenticator", lambda: FakeAuthenticator())
+
+    try:
+        cli.main(["whoami"])
+    except SystemExit as exc:
+        assert exc.code == 1
+    else:
+        raise AssertionError("missing credentials should require cpx login")
+
+    assert "Run `cpx login` first" in capsys.readouterr().out
+
+
+def test_cpx_api_prints_openai_and_anthropic_settings(monkeypatch, tmp_path, capsys) -> None:
+    prepare_config(monkeypatch, tmp_path)
+
+    cli.main(["api"])
+
+    output = capsys.readouterr().out
+    assert "OpenAI Compatible:" in output
+    assert "API Key:  sk-local-test" in output
+    assert "Base URL: http://127.0.0.1:4321/v1" in output
+    assert "Anthropic Compatible:" in output
+    assert "Base URL: http://127.0.0.1:4321" in output
+
+
 def test_cpx_logout_removes_saved_copilot_credentials(monkeypatch, tmp_path, capsys) -> None:
     prepare_config(monkeypatch, tmp_path)
     access_token = tmp_path / "access-token"

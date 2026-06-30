@@ -12,6 +12,7 @@ from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
+import httpx
 import uvicorn
 
 from .config_files import active_config_dir, ensure_config_files, resolve_config_path
@@ -46,6 +47,10 @@ def main(argv: list[str] | None = None) -> None:
             login()
         elif command == "logout":
             logout()
+        elif command == "whoami":
+            whoami()
+        elif command == "api":
+            api()
         elif command in {"model", "models"}:
             handle_models(args)
         elif command == "update":
@@ -66,6 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("version", help="Show cpx version.")
     subparsers.add_parser("login", help="Authenticate GitHub Copilot with device flow.")
     subparsers.add_parser("logout", help="Remove saved GitHub Copilot OAuth credentials.")
+    subparsers.add_parser("whoami", help="Show the current GitHub Copilot account.")
+    subparsers.add_parser("api", help="Show OpenAI and Anthropic API settings.")
     subparsers.add_parser("stop", help="Stop the running proxy instance.")
     subparsers.add_parser("quit", help="Stop the running proxy instance.")
     subparsers.add_parser("update", help="Update cpx from GitHub using uv tool install.")
@@ -168,6 +175,36 @@ def logout() -> None:
         print("GitHub Copilot OAuth credentials removed.", flush=True)
     else:
         print("No saved GitHub Copilot OAuth credentials found.", flush=True)
+
+
+def whoami() -> None:
+    authenticator = github_copilot_authenticator()
+    if not has_access_token(authenticator):
+        print("GitHub Copilot is not authenticated. Run `cpx login` first.", flush=True)
+        raise SystemExit(1)
+    try:
+        account = fetch_github_account(authenticator)
+    except Exception as exc:
+        print(f"Unable to read GitHub account: {short_error(exc)}", flush=True)
+        print("Run `cpx login` to authenticate again.", flush=True)
+        raise SystemExit(1) from exc
+
+    login = account.get("login")
+    user_id = account.get("id")
+    if login:
+        print(f"GitHub Login:       {login}", flush=True)
+    if user_id is not None:
+        print(f"GitHub User ID:     {user_id}", flush=True)
+    if not login and user_id is None:
+        raise RuntimeError("GitHub user response did not include login or id.")
+
+
+def api() -> None:
+    settings = get_settings()
+    if not settings.local_api_key:
+        msg = "LOCAL_API_KEY is required. Copy .env.example to .env and set a local key."
+        raise RuntimeError(msg)
+    print_api_info(settings)
 
 
 def test_models(args: argparse.Namespace) -> None:
@@ -428,6 +465,28 @@ def github_copilot_authenticator():
     return Authenticator()
 
 
+def fetch_github_account(authenticator) -> dict[str, object]:
+    access_token = authenticator.get_access_token()
+    response = httpx.get(
+        os.getenv("GITHUB_COPILOT_USER_URL", "https://api.github.com/user"),
+        headers=github_user_headers(access_token),
+        timeout=30,
+    )
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise RuntimeError("GitHub user response was not an object.")
+    return data
+
+
+def github_user_headers(access_token: str) -> dict[str, str]:
+    return {
+        "accept": "application/vnd.github+json",
+        "authorization": f"token {access_token}",
+        "user-agent": "GithubCopilot/1.155.0",
+    }
+
+
 def has_access_token(authenticator) -> bool:
     try:
         return bool(Path(authenticator.access_token_file).read_text(encoding="utf-8").strip())
@@ -524,8 +583,7 @@ def is_port_available(host: str, port: int) -> bool:
 
 
 def print_startup_info(settings) -> None:
-    root_base_url = f"http://{settings.host}:{settings.port}"
-    openai_base_url = f"{root_base_url}/v1"
+    root_base_url, openai_base_url = local_api_urls(settings)
 
     print("", flush=True)
     print("Copilot Proxy is starting...", flush=True)
@@ -534,6 +592,23 @@ def print_startup_info(settings) -> None:
     print(f"API Key:            {settings.local_api_key}", flush=True)
     print(f"Default model:      {settings.default_model}", flush=True)
     print("", flush=True)
+
+
+def print_api_info(settings) -> None:
+    root_base_url, openai_base_url = local_api_urls(settings)
+
+    print("OpenAI Compatible:", flush=True)
+    print(f"API Key:  {settings.local_api_key}", flush=True)
+    print(f"Base URL: {openai_base_url}", flush=True)
+    print("", flush=True)
+    print("Anthropic Compatible:", flush=True)
+    print(f"API Key:  {settings.local_api_key}", flush=True)
+    print(f"Base URL: {root_base_url}", flush=True)
+
+
+def local_api_urls(settings) -> tuple[str, str]:
+    root_base_url = f"http://{settings.host}:{settings.port}"
+    return root_base_url, f"{root_base_url}/v1"
 
 
 def format_model_line(entry: dict[str, str], is_default: bool) -> str:
