@@ -21,7 +21,8 @@ dev = [
 ]
 
 [project.scripts]
-copilot-proxy = "copilot_proxy.main:run"
+copilot-proxy = "copilot_proxy.cli:main"
+copilot-proxy-server = "copilot_proxy.main:run"
 
 [build-system]
 requires = ["hatchling"]

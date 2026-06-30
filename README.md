@@ -29,23 +29,68 @@ Copy-Item .env.example .env
 
 编辑 `.env`，把 `LOCAL_API_KEY` 替换成本地使用的密钥。不要提交 `.env`。
 
-## 运行
+## 一键启动
+
+推荐直接使用跨平台 Python CLI：
+
+```bash
+uv run copilot-proxy
+```
+
+它会先检查 GitHub Copilot OAuth 凭据。如果当前机器还没有完成授权，终端会显示 GitHub device link 和需要输入的验证码，例如：
+
+```text
+Please visit https://github.com/login/device and enter code XXXX-XXXX to authenticate.
+```
+
+完成授权后，启动脚本会显示两种客户端格式使用的 Base URL 和本地 API Key：
+
+```text
+OpenAI Base URL:    http://127.0.0.1:4000/v1
+Anthropic Base URL: http://127.0.0.1:4000
+API Key:            <LOCAL_API_KEY>
+```
+
+也可以使用仓库里的薄脚本：
+
+```powershell
+# Windows PowerShell
+.\scripts\start.ps1
+```
+
+```cmd
+:: Windows cmd.exe
+scripts\start.cmd
+```
+
+```bash
+# macOS / Linux / Git Bash / WSL
+sh ./scripts/start.sh
+```
+
+如果你只想启动服务、不做 Copilot OAuth 预检查：
+
+```bash
+uv run copilot-proxy --skip-auth-check
+```
+
+## 运行细节
 
 启动带 OpenAI 和 Anthropic 路由的 FastAPI wrapper：
 
-```powershell
+```bash
 copilot-proxy
 ```
 
 等价的开发命令：
 
-```powershell
+```bash
 uvicorn copilot_proxy.main:app --host 127.0.0.1 --port 4000 --reload
 ```
 
 如果只需要 LiteLLM 原生路由，也可以直接运行 LiteLLM Proxy：
 
-```powershell
+```bash
 litellm --config litellm.yaml --host 127.0.0.1 --port 4000
 ```
 
