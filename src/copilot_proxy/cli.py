@@ -17,7 +17,7 @@ import uvicorn
 from .config_files import active_config_dir, ensure_config_files, resolve_config_path
 from .github_copilot_patch import apply_github_copilot_oauth_patch
 from .litellm_registry import register_litellm_model_metadata
-from .model_store import load_model_config, write_model_config
+from .model_store import write_default_model
 from .settings import get_settings
 
 GITHUB_INSTALL_URL = "git+https://github.com/LittleGraper/Copilot-Proxy.git"
@@ -42,8 +42,6 @@ def main(argv: list[str] | None = None) -> None:
             start(args)
         elif command in {"stop", "quit"}:
             stop()
-        elif command == "config":
-            print_config()
         elif command == "login":
             login()
         elif command == "logout":
@@ -66,7 +64,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("help", help="Show this help message.")
     subparsers.add_parser("version", help="Show cpx version.")
-    subparsers.add_parser("config", help="Show active configuration paths.")
     subparsers.add_parser("login", help="Authenticate GitHub Copilot with device flow.")
     subparsers.add_parser("logout", help="Remove saved GitHub Copilot OAuth credentials.")
     subparsers.add_parser("stop", help="Stop the running proxy instance.")
@@ -198,7 +195,7 @@ def test_models(args: argparse.Namespace) -> None:
     print("Testing configured models...", flush=True)
     for entry in registry:
         try:
-            test_model_entry(litellm, entry, timeout=args.timeout)
+            test_model_entry_with_retry(litellm, entry, timeout=args.timeout)
             print(f"{green('OK')}   {entry['name']} -> {entry['upstream']}", flush=True)
         except Exception as exc:
             failures += 1
@@ -209,6 +206,20 @@ def test_models(args: argparse.Namespace) -> None:
     if failures:
         raise SystemExit(1)
     print("All configured models are reachable.", flush=True)
+
+
+def test_model_entry_with_retry(litellm, entry: dict[str, str], *, timeout: float) -> None:
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            test_model_entry(litellm, entry, timeout=timeout)
+            return
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(1)
+    if last_error is not None:
+        raise last_error
 
 
 def test_model_entry(litellm, entry: dict[str, str], *, timeout: float) -> None:
@@ -321,16 +332,6 @@ def is_port_open(host: str, port: int) -> bool:
         return False
 
 
-def print_config() -> None:
-    settings = get_settings()
-    config_dir = active_config_dir()
-    models_path = resolve_config_path(settings.models_config)
-    print(f"Config dir: {config_dir}")
-    print(f"Env file:   {config_dir / '.env'}")
-    print(f"Models:     {models_path}")
-    print(f"PID file:   {config_dir / '.copilot-proxy.pid'}")
-
-
 def handle_models(args: argparse.Namespace) -> None:
     select_model_interactively()
 
@@ -338,12 +339,12 @@ def handle_models(args: argparse.Namespace) -> None:
 def set_default_model(name: str) -> None:
     settings = get_settings()
     models_path = resolve_config_path(settings.models_config)
-    _, registry = load_model_config(models_path)
+    registry = settings.model_registry()
     names = {entry["name"] for entry in registry}
     if name not in names:
         msg = f"Unknown model '{name}'. Run `cpx models` to see configured models."
         raise RuntimeError(msg)
-    write_model_config(models_path, name, registry)
+    write_default_model(models_path, name)
     get_settings.cache_clear()
     print(f"Default model set to {green(name)}.")
 

@@ -3,7 +3,16 @@ from __future__ import annotations
 from contextlib import suppress
 
 from copilot_proxy import cli
-from copilot_proxy.settings import get_settings
+from copilot_proxy.settings import Settings, get_settings
+
+
+def fake_dynamic_model_registry(_: Settings) -> list[dict[str, str]]:
+    return [
+        {"name": "gpt-4", "upstream": "github_copilot/gpt-4"},
+        {"name": "gpt-5.5", "upstream": "github_copilot/gpt-5.5"},
+        {"name": "codex", "upstream": "github_copilot/codex", "mode": "responses"},
+        {"name": "embed", "upstream": "github_copilot/embed", "mode": "embedding"},
+    ]
 
 
 def write_config(tmp_path) -> None:
@@ -50,10 +59,12 @@ mode = "embedding"
 def prepare_config(monkeypatch, tmp_path) -> None:
     write_config(tmp_path)
     monkeypatch.setenv("CPX_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("CPX_DISABLE_DYNAMIC_MODELS", "1")
     monkeypatch.setenv("LOCAL_API_KEY", "sk-local-test")
     monkeypatch.setenv("COPILOT_PROXY_HOST", "127.0.0.1")
     monkeypatch.setenv("COPILOT_PROXY_PORT", "4321")
     monkeypatch.setenv("COPILOT_PROXY_MODELS_CONFIG", "models.toml")
+    monkeypatch.setattr(Settings, "dynamic_model_registry", fake_dynamic_model_registry)
     monkeypatch.chdir(tmp_path)
     get_settings.cache_clear()
 
@@ -79,15 +90,18 @@ def test_cpx_version_flag_and_command(monkeypatch, tmp_path, capsys) -> None:
     assert capsys.readouterr().out.count("1.2.3") == 2
 
 
-def test_cpx_config_prints_paths(monkeypatch, tmp_path, capsys) -> None:
+def test_cpx_config_is_not_registered(monkeypatch, tmp_path, capsys) -> None:
     prepare_config(monkeypatch, tmp_path)
 
-    cli.main(["config"])
+    try:
+        cli.main(["config"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("removed subcommand should not be registered")
 
-    output = capsys.readouterr().out
-    assert f"Config dir: {tmp_path}" in output
-    assert f"Env file:   {tmp_path / '.env'}" in output
-    assert f"Models:     {tmp_path / 'models.toml'}" in output
+    output = capsys.readouterr()
+    assert "invalid choice: 'config'" in output.err
 
 
 def test_cpx_login_runs_device_flow(monkeypatch, tmp_path) -> None:
@@ -395,6 +409,46 @@ def test_cpx_test_exits_nonzero_on_model_failure(monkeypatch, tmp_path, capsys) 
         raise AssertionError("cpx test should exit non-zero when a model fails")
 
     assert "FAIL gpt-5.5 -> github_copilot/gpt-5.5: boom" in capsys.readouterr().out
+
+
+def test_cpx_test_retries_transient_model_failure(monkeypatch, tmp_path, capsys) -> None:
+    prepare_config(monkeypatch, tmp_path)
+    attempts: dict[str, int] = {}
+
+    class FakeLiteLLM:
+        @staticmethod
+        def register_model(model_cost: dict[str, dict[str, str]]) -> None:
+            return None
+
+        @staticmethod
+        def completion(
+            model: str,
+            messages: list[dict[str, str]],
+            max_tokens: int,
+            timeout: float,
+        ) -> object:
+            attempts[model] = attempts.get(model, 0) + 1
+            if model.endswith("gpt-5.5") and attempts[model] == 1:
+                raise RuntimeError("temporary upstream failure")
+            return object()
+
+        @staticmethod
+        def responses(model: str, input: str, max_output_tokens: int, timeout: float) -> object:
+            return object()
+
+        @staticmethod
+        def embedding(model: str, input: list[str], timeout: float) -> object:
+            return object()
+
+    monkeypatch.setattr(cli, "require_copilot_login", lambda: None)
+    monkeypatch.setattr(cli, "supports_color", lambda: False)
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
+    monkeypatch.setitem(cli.sys.modules, "litellm", FakeLiteLLM)
+
+    cli.main(["test"])
+
+    assert attempts["github_copilot/gpt-5.5"] == 2
+    assert "FAIL" not in capsys.readouterr().out
 
 
 def test_cpx_test_colorizes_ok_and_fail(monkeypatch, tmp_path, capsys) -> None:

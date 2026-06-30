@@ -19,10 +19,6 @@ COPILOT_PROXY_LOG_LEVEL=info
 
 DEFAULT_MODELS_TOML = """[models]
 default = "gpt-4"
-
-[[models.aliases]]
-name = "gpt-4"
-upstream = "github_copilot/gpt-4"
 """
 
 
@@ -30,10 +26,6 @@ def active_config_dir() -> Path:
     configured = os.getenv("CPX_CONFIG_DIR") or os.getenv("COPILOT_PROXY_CONFIG_DIR")
     if configured:
         return Path(configured).expanduser().resolve()
-
-    current = Path.cwd()
-    if (current / ".env").exists() or (current / "models.toml").exists():
-        return current
 
     return user_config_dir()
 

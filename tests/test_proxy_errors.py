@@ -75,6 +75,7 @@ upstream = "github_copilot/upstream-two"
 
     monkeypatch.setenv("LOCAL_API_KEY", "sk-test")
     monkeypatch.setenv("COPILOT_PROXY_MODELS_CONFIG", str(config))
+    monkeypatch.setenv("CPX_DISABLE_DYNAMIC_MODELS", "1")
     monkeypatch.setenv("COPILOT_PROXY_DEFAULT_MODEL", "")
     monkeypatch.setenv("COPILOT_PROXY_MODEL_ALIASES", "")
     get_settings.cache_clear()
@@ -83,4 +84,4 @@ upstream = "github_copilot/upstream-two"
     response = client.get("/v1/models", headers={"Authorization": "Bearer sk-test"})
 
     assert response.status_code == 200
-    assert [model["id"] for model in response.json()["data"]] == ["local-one", "local-two"]
+    assert [model["id"] for model in response.json()["data"]] == ["local-one"]

@@ -1,23 +1,2 @@
 [models]
 default = "gpt-4o"
-
-[[models.aliases]]
-name = "gpt-4"
-upstream = "github_copilot/gpt-4"
-
-[[models.aliases]]
-name = "gpt-4o"
-upstream = "github_copilot/gpt-4o"
-
-[[models.aliases]]
-name = "gpt-4.1"
-upstream = "github_copilot/gpt-4.1"
-
-[[models.aliases]]
-name = "gpt-5.4"
-upstream = "github_copilot/gpt-5.4"
-
-[[models.aliases]]
-name = "gpt-5.5"
-upstream = "github_copilot/gpt-5.5"
-mode = "responses"

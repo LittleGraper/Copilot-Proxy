@@ -1,3 +1,4 @@
+import os
 import tomllib
 from functools import lru_cache
 from pathlib import Path
@@ -52,24 +53,31 @@ class Settings(BaseSettings):
         return f"github_copilot/{selected}"
 
     def model_registry(self) -> list[dict[str, str]]:
+        dynamic = self.dynamic_model_registry()
+        if dynamic:
+            return dynamic
+        return self.local_model_registry()
+
+    def dynamic_model_registry(self) -> list[dict[str, str]]:
+        if self._dynamic_models_disabled():
+            return []
+        try:
+            from .github_copilot_models import fetch_available_models
+
+            registry = fetch_available_models()
+        except Exception:
+            return []
+        return self._with_default_model(registry)
+
+    def local_model_registry(self) -> list[dict[str, str]]:
         models_data = self._models_data().get("models", {})
-        aliases = models_data.get("aliases", [])
         default = models_data.get("default")
-        registry: list[dict[str, str]] = []
-        for entry in aliases:
-            if not isinstance(entry, dict):
-                continue
-            name = entry.get("name")
-            if not isinstance(name, str) or not name:
-                continue
-            upstream = entry.get("upstream")
-            if not isinstance(upstream, str) or not upstream:
-                upstream = self._default_upstream(name)
-            normalized = {"name": name, "upstream": upstream}
-            mode = entry.get("mode")
-            if isinstance(mode, str) and mode:
-                normalized["mode"] = mode
-            registry.append(normalized)
+        if isinstance(default, str) and default:
+            return [{"name": default, "upstream": self._default_upstream(default)}]
+        return [{"name": "gpt-4", "upstream": "github_copilot/gpt-4"}]
+
+    def _with_default_model(self, registry: list[dict[str, str]]) -> list[dict[str, str]]:
+        default = self._models_data().get("models", {}).get("default")
         if (
             isinstance(default, str)
             and default
@@ -80,6 +88,10 @@ class Settings(BaseSettings):
                 {"name": default, "upstream": self._default_upstream(default)},
             )
         return registry
+
+    def _dynamic_models_disabled(self) -> bool:
+        value = os.getenv("CPX_DISABLE_DYNAMIC_MODELS", "")
+        return value.lower() in {"1", "true", "yes", "on"}
 
     def validate_runtime(self) -> None:
         if not self.local_api_key:

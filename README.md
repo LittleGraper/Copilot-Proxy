@@ -58,7 +58,19 @@ Copy-Item models.toml.example models.toml
 
 本地开发时，编辑 `.env`，把 `LOCAL_API_KEY` 替换成本地使用的密钥。不要提交 `.env`。
 
-模型清单由本地 `models.toml` 维护，`.env` 默认只保存密钥、端口、日志级别等运行环境配置。`models.toml` 是本地配置，已被 `.gitignore` 忽略；仓库只提交 `models.toml.example` 作为模板。
+`cpx` 默认使用用户级配置目录：Windows 是 `%APPDATA%\cpx`，macOS/Linux 是 `~/.config/cpx`。如果你想临时使用当前仓库目录里的 `.env` / `models.toml`，请显式设置配置目录：
+
+```powershell
+$env:CPX_CONFIG_DIR = (Get-Location).Path
+```
+
+macOS/Linux：
+
+```bash
+export CPX_CONFIG_DIR=$PWD
+```
+
+模型清单会优先从 GitHub Copilot `/models` 动态获取，也就是按当前登录账号实际有权限的模型展示和测试。`models.toml` 仍用于保存默认模型，以及离线或未登录时的本地 fallback 配置。`.env` 默认只保存密钥、端口、日志级别等运行环境配置。`models.toml` 是本地配置，已被 `.gitignore` 忽略；仓库只提交 `models.toml.example` 作为模板。
 
 ## 一键启动
 
@@ -90,7 +102,7 @@ Proxy is running in the background (pid 12345).
 Log file:           <config-dir>/cpx.log
 ```
 
-默认的 `cpx start` 不会阻塞当前终端。实时日志会写入 `cpx config` 显示的配置目录下的 `cpx.log`。
+默认的 `cpx start` 不会阻塞当前终端。实时日志会写入配置目录下的 `cpx.log`。
 
 如果你想在当前终端前台运行并直接看 uvicorn 日志，可以使用：
 
@@ -164,12 +176,6 @@ cpx stop
 
 ```bash
 cpx quit
-```
-
-查看配置路径：
-
-```bash
-cpx config
 ```
 
 登录 GitHub Copilot：
@@ -282,7 +288,7 @@ print(message.content[0].text)
 
 ## 模型别名
 
-模型别名配置在本地 `models.toml` 中。首次使用时从模板复制：
+模型列表默认会从当前登录的 GitHub Copilot 账号动态获取。本地 `models.toml` 用于保存默认模型，以及无法访问 Copilot `/models` 时的 fallback 模型列表。首次使用时可以从模板复制：
 
 ```bash
 cp models.toml.example models.toml
@@ -294,7 +300,7 @@ Windows PowerShell：
 Copy-Item models.toml.example models.toml
 ```
 
-| 本地模型名 | 上游模型名 |
+| fallback 本地模型名 | fallback 上游模型名 |
 | --- | --- |
 | `gpt-4` | `github_copilot/gpt-4` |
 | `gpt-4o` | `github_copilot/gpt-4o` |
@@ -302,7 +308,7 @@ Copy-Item models.toml.example models.toml
 | `gpt-5.4` | `github_copilot/gpt-5.4` |
 | `gpt-5.5` | `github_copilot/gpt-5.5` |
 
-不同账号和订阅可用的 Copilot 模型可能不同。如果你的账号暴露的模型名不一样，请编辑本地 `models.toml`。
+不同账号和订阅可用的 Copilot 模型可能不同。登录后，`cpx models` 和 `cpx test` 会优先使用 Copilot 动态返回的模型列表。如果动态获取失败，才使用本地 `models.toml`。
 
 示例：
 
@@ -325,7 +331,7 @@ upstream = "github_copilot/gpt-5.5"
 - `upstream`：实际传给 LiteLLM 的上游模型名
 - `mode`：可选，用于标记 `responses`、`embedding` 等模型用途
 
-模型配置只从 `models.toml` 读取，避免模型配置散落在环境变量里。若本地 `models.toml` 不存在，程序会回退读取 `models.toml.example`，方便刚克隆仓库时直接启动。
+模型配置不再从环境变量读取，避免模型配置散落在 `.env` 里。若本地 `models.toml` 不存在，程序会回退读取 `models.toml.example`，方便刚克隆仓库时直接启动。
 
 可以用交互式命令切换默认模型。`model` 和 `models` 等价：
 
