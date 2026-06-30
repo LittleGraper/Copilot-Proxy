@@ -2,4 +2,4 @@
 setlocal
 
 cd /d "%~dp0.."
-uv run copilot-proxy %*
+uv run cpx start %*

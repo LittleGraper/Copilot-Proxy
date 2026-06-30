@@ -5,4 +5,4 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 cd "$PROJECT_ROOT"
 
-uv run copilot-proxy "$@"
+uv run cpx start "$@"

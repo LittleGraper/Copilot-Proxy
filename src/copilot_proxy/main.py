@@ -148,8 +148,10 @@ def _litellm() -> Any:
     import litellm
 
     from .github_copilot_patch import apply_github_copilot_oauth_patch
+    from .litellm_registry import register_litellm_model_metadata
 
     apply_github_copilot_oauth_patch()
+    register_litellm_model_metadata(litellm, get_settings().model_registry())
     return litellm
 
 

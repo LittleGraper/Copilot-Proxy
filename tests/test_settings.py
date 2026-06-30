@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copilot_proxy.config_files import default_models_toml, ensure_config_files
 from copilot_proxy.settings import Settings
 
 
@@ -42,7 +43,7 @@ mode = "chat"
     }
 
 
-def test_env_alias_override_takes_precedence(tmp_path) -> None:
+def test_stale_env_model_overrides_are_ignored(tmp_path) -> None:
     config = tmp_path / "models.toml"
     config.write_text(
         """
@@ -63,13 +64,13 @@ upstream = "github_copilot/gpt-4o"
         COPILOT_PROXY_MODEL_ALIASES="gpt-5.5,gpt-4.1",
     )
 
-    assert settings.aliases == ["gpt-5.5", "gpt-4.1"]
-    assert settings.default_model == "gpt-5.5"
-    assert settings.upstream_model("gpt-4.1") == "github_copilot/gpt-4.1"
+    assert settings.aliases == ["gpt-4o"]
+    assert settings.default_model == "gpt-4o"
+    assert settings.upstream_model("gpt-4o") == "github_copilot/gpt-4o"
 
 
 def test_models_toml_example_is_used_as_default_fallback(monkeypatch, tmp_path) -> None:
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CPX_CONFIG_DIR", str(tmp_path))
     example = tmp_path / "models.toml.example"
     example.write_text(
         """
@@ -93,3 +94,35 @@ upstream = "github_copilot/example-model"
     assert settings.aliases == ["example-model"]
     assert settings.default_model == "example-model"
     assert settings.upstream_model("example-model") == "github_copilot/example-model"
+
+
+def test_default_model_is_added_to_registry_when_alias_is_missing(tmp_path) -> None:
+    config = tmp_path / "models.toml"
+    config.write_text(
+        """
+[models]
+default = "gpt-4o"
+
+[[models.aliases]]
+name = "gpt-4"
+upstream = "github_copilot/gpt-4"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    settings = Settings(
+        LOCAL_API_KEY="sk-test",
+        COPILOT_PROXY_MODELS_CONFIG=config,
+    )
+
+    assert settings.aliases == ["gpt-4o", "gpt-4"]
+    assert settings.upstream_model(None) == "github_copilot/gpt-4o"
+
+
+def test_ensure_config_files_uses_packaged_models_template(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("CPX_CONFIG_DIR", str(tmp_path))
+
+    ensure_config_files()
+
+    assert (tmp_path / "models.toml").read_text(encoding="utf-8") == default_models_toml()
+    assert "gpt-5.5" in default_models_toml()

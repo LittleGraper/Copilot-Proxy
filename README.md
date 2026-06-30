@@ -1,4 +1,4 @@
-# Copilot-Proxy
+# cpx
 
 用于 GitHub Copilot Models 的本地 LiteLLM 代理。它会暴露一个本地 Base URL 和 API Key，并支持 OpenAI 兼容格式与 Anthropic 兼容格式的请求。
 
@@ -20,6 +20,32 @@
 
 ## 安装
 
+从 GitHub 全局安装推荐使用 `uv tool install`：
+
+```bash
+uv tool install git+https://github.com/LittleGraper/Copilot-Proxy.git
+```
+
+在本仓库开发时，也可以把当前工作区直接安装成全局命令：
+
+```bash
+uv tool install --force .
+```
+
+安装后即可在任意终端直接运行：
+
+```bash
+cpx
+```
+
+更新到最新版本：
+
+```bash
+uv tool install --force git+https://github.com/LittleGraper/Copilot-Proxy.git
+```
+
+开发环境可以在仓库目录内运行：
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -28,16 +54,24 @@ Copy-Item .env.example .env
 Copy-Item models.toml.example models.toml
 ```
 
-编辑 `.env`，把 `LOCAL_API_KEY` 替换成本地使用的密钥。不要提交 `.env`。
+全局安装后，第一次运行 `cpx` 会自动创建本机配置目录和模板配置文件，不需要手动执行 `cpx init`。
+
+本地开发时，编辑 `.env`，把 `LOCAL_API_KEY` 替换成本地使用的密钥。不要提交 `.env`。
 
 模型清单由本地 `models.toml` 维护，`.env` 默认只保存密钥、端口、日志级别等运行环境配置。`models.toml` 是本地配置，已被 `.gitignore` 忽略；仓库只提交 `models.toml.example` 作为模板。
 
 ## 一键启动
 
-推荐直接使用跨平台 Python CLI：
+全局安装后启动代理：
 
 ```bash
-uv run copilot-proxy
+cpx start
+```
+
+在仓库目录内开发运行：
+
+```bash
+uv run cpx start
 ```
 
 它会先检查 GitHub Copilot OAuth 凭据。如果当前机器还没有完成授权，终端会显示 GitHub device link 和需要输入的验证码，例如：
@@ -46,13 +80,25 @@ uv run copilot-proxy
 Please visit https://github.com/login/device and enter code XXXX-XXXX to authenticate.
 ```
 
-完成授权后，启动脚本会显示两种客户端格式使用的 Base URL 和本地 API Key：
+完成授权后，启动脚本会显示两种客户端格式使用的 Base URL 和本地 API Key，然后在后台启动代理并释放当前终端：
 
 ```text
 OpenAI Base URL:    http://127.0.0.1:4000/v1
 Anthropic Base URL: http://127.0.0.1:4000
 API Key:            <LOCAL_API_KEY>
+Proxy is running in the background (pid 12345).
+Log file:           <config-dir>/cpx.log
 ```
+
+默认的 `cpx start` 不会阻塞当前终端。实时日志会写入 `cpx config` 显示的配置目录下的 `cpx.log`。
+
+如果你想在当前终端前台运行并直接看 uvicorn 日志，可以使用：
+
+```bash
+cpx start --foreground
+```
+
+前台模式下按 `Ctrl+C` 会停止当前代理进程并清理 pid 文件。
 
 重复运行启动脚本时，启动器会先读取 `.copilot-proxy.pid`，如果发现上一次由本项目启动的代理实例仍在运行，会先停止旧实例，再使用配置端口重新启动。也就是说，默认行为是“重启本项目代理”，不是开多个实例。
 
@@ -68,7 +114,7 @@ Anthropic Base URL: http://127.0.0.1:4000
 如果你不希望启动器停止上一次记录的本项目实例：
 
 ```bash
-uv run copilot-proxy --no-restart-existing
+cpx start --no-restart-existing
 ```
 
 也可以使用仓库里的薄脚本：
@@ -91,15 +137,86 @@ sh ./scripts/start.sh
 如果你只想启动服务、不做 Copilot OAuth 预检查：
 
 ```bash
-uv run copilot-proxy --skip-auth-check
+cpx start --skip-auth-check
+```
+
+这个选项同样可以和前台模式组合：
+
+```bash
+cpx start --foreground --skip-auth-check
 ```
 
 ## 运行细节
 
+只运行 `cpx` 不会启动代理，而是显示帮助：
+
+```bash
+cpx
+```
+
+停止代理：
+
+```bash
+cpx stop
+```
+
+`quit` 是 `stop` 的别名：
+
+```bash
+cpx quit
+```
+
+查看配置路径：
+
+```bash
+cpx config
+```
+
+登录 GitHub Copilot：
+
+```bash
+cpx login
+```
+
+如果这台机器还没有授权，终端会显示 GitHub device link 和验证码。`cpx start` 和 `cpx test` 默认不会主动发起登录流程；未登录时会提示先运行 `cpx login`。
+
+退出登录并删除本机保存的 Copilot OAuth/API token：
+
+```bash
+cpx logout
+```
+
+查看帮助和版本：
+
+```bash
+cpx help
+cpx -h
+cpx -v
+cpx version
+```
+
+从 GitHub 更新当前全局安装：
+
+```bash
+cpx update
+```
+
+测试当前 `models.toml` 中所有模型的连通性：
+
+```bash
+cpx test
+```
+
+只测试某个模型：
+
+```bash
+cpx test --model gpt-5.5
+```
+
 启动带 OpenAI 和 Anthropic 路由的 FastAPI wrapper：
 
 ```bash
-copilot-proxy
+cpx start
 ```
 
 等价的开发命令：
@@ -181,8 +298,9 @@ Copy-Item models.toml.example models.toml
 | --- | --- |
 | `gpt-4` | `github_copilot/gpt-4` |
 | `gpt-4o` | `github_copilot/gpt-4o` |
-| `gpt-5.1-codex` | `github_copilot/gpt-5.1-codex` |
-| `text-embedding-3-small` | `github_copilot/text-embedding-3-small` |
+| `gpt-4.1` | `github_copilot/gpt-4.1` |
+| `gpt-5.4` | `github_copilot/gpt-5.4` |
+| `gpt-5.5` | `github_copilot/gpt-5.5` |
 
 不同账号和订阅可用的 Copilot 模型可能不同。如果你的账号暴露的模型名不一样，请编辑本地 `models.toml`。
 
@@ -207,14 +325,16 @@ upstream = "github_copilot/gpt-5.5"
 - `upstream`：实际传给 LiteLLM 的上游模型名
 - `mode`：可选，用于标记 `responses`、`embedding` 等模型用途
 
-`.env` 仍然支持临时覆盖：
+模型配置只从 `models.toml` 读取，避免模型配置散落在环境变量里。若本地 `models.toml` 不存在，程序会回退读取 `models.toml.example`，方便刚克隆仓库时直接启动。
 
-```env
-COPILOT_PROXY_DEFAULT_MODEL=gpt-5.5
-COPILOT_PROXY_MODEL_ALIASES=gpt-5.5,gpt-4o
+可以用交互式命令切换默认模型。`model` 和 `models` 等价：
+
+```bash
+cpx model
+cpx models
 ```
 
-正常使用时更推荐维护 `models.toml`，避免模型配置散落在环境变量里。若本地 `models.toml` 不存在，程序会回退读取 `models.toml.example`，方便刚克隆仓库时直接启动。
+交互式模型选择器可用上下键移动、回车确认；当前默认模型会用绿色标注。非交互终端会直接打印模型选项并退出。
 
 ## 验证
 

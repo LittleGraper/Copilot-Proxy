@@ -6,6 +6,8 @@ from typing import Any
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .config_files import env_file_for_settings, resolve_config_path
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -16,14 +18,6 @@ class Settings(BaseSettings):
     )
     host: str = Field(default="127.0.0.1", validation_alias="COPILOT_PROXY_HOST")
     port: int = Field(default=4000, validation_alias="COPILOT_PROXY_PORT")
-    default_model_override: str | None = Field(
-        default=None,
-        validation_alias="COPILOT_PROXY_DEFAULT_MODEL",
-    )
-    model_aliases_override: str | None = Field(
-        default=None,
-        validation_alias="COPILOT_PROXY_MODEL_ALIASES",
-    )
     models_config: Path = Field(
         default=Path("models.toml"),
         validation_alias="COPILOT_PROXY_MODELS_CONFIG",
@@ -37,16 +31,10 @@ class Settings(BaseSettings):
 
     @property
     def aliases(self) -> list[str]:
-        if self.model_aliases_override:
-            return [
-                alias.strip() for alias in self.model_aliases_override.split(",") if alias.strip()
-            ]
         return [model["name"] for model in self.model_registry()]
 
     @property
     def default_model(self) -> str:
-        if self.default_model_override:
-            return self.default_model_override
         data = self._models_data()
         default = data.get("models", {}).get("default")
         if isinstance(default, str) and default:
@@ -64,12 +52,9 @@ class Settings(BaseSettings):
         return f"github_copilot/{selected}"
 
     def model_registry(self) -> list[dict[str, str]]:
-        if self.model_aliases_override:
-            return [
-                {"name": alias, "upstream": self._default_upstream(alias)} for alias in self.aliases
-            ]
-
-        aliases = self._models_data().get("models", {}).get("aliases", [])
+        models_data = self._models_data().get("models", {})
+        aliases = models_data.get("aliases", [])
+        default = models_data.get("default")
         registry: list[dict[str, str]] = []
         for entry in aliases:
             if not isinstance(entry, dict):
@@ -85,6 +70,15 @@ class Settings(BaseSettings):
             if isinstance(mode, str) and mode:
                 normalized["mode"] = mode
             registry.append(normalized)
+        if (
+            isinstance(default, str)
+            and default
+            and default not in {entry["name"] for entry in registry}
+        ):
+            registry.insert(
+                0,
+                {"name": default, "upstream": self._default_upstream(default)},
+            )
         return registry
 
     def validate_runtime(self) -> None:
@@ -96,7 +90,7 @@ class Settings(BaseSettings):
             raise RuntimeError(msg)
 
     def _models_data(self) -> dict[str, Any]:
-        config_path = self.models_config
+        config_path = resolve_config_path(self.models_config)
         if not config_path.exists() and config_path.name == "models.toml":
             example_path = config_path.with_name("models.toml.example")
             if example_path.exists():
@@ -114,4 +108,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings(_env_file=env_file_for_settings())

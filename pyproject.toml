@@ -1,5 +1,5 @@
 [project]
-name = "copilot-proxy"
+name = "cpx"
 version = "0.1.0"
 description = "Local LiteLLM proxy for GitHub Copilot models with OpenAI and Anthropic-compatible APIs."
 readme = "README.md"
@@ -21,8 +21,8 @@ dev = [
 ]
 
 [project.scripts]
-copilot-proxy = "copilot_proxy.cli:main"
-copilot-proxy-server = "copilot_proxy.main:run"
+cpx = "copilot_proxy.cli:main"
+cpx-server = "copilot_proxy.main:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -30,6 +30,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/copilot_proxy"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"models.toml.example" = "copilot_proxy/models.toml.example"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
