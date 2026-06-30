@@ -25,9 +25,12 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
+Copy-Item models.toml.example models.toml
 ```
 
 编辑 `.env`，把 `LOCAL_API_KEY` 替换成本地使用的密钥。不要提交 `.env`。
+
+模型清单由本地 `models.toml` 维护，`.env` 默认只保存密钥、端口、日志级别等运行环境配置。`models.toml` 是本地配置，已被 `.gitignore` 忽略；仓库只提交 `models.toml.example` 作为模板。
 
 ## 一键启动
 
@@ -49,6 +52,23 @@ Please visit https://github.com/login/device and enter code XXXX-XXXX to authent
 OpenAI Base URL:    http://127.0.0.1:4000/v1
 Anthropic Base URL: http://127.0.0.1:4000
 API Key:            <LOCAL_API_KEY>
+```
+
+重复运行启动脚本时，启动器会先读取 `.copilot-proxy.pid`，如果发现上一次由本项目启动的代理实例仍在运行，会先停止旧实例，再使用配置端口重新启动。也就是说，默认行为是“重启本项目代理”，不是开多个实例。
+
+```text
+Stopping previous Copilot Proxy instance (pid 12345)...
+Previous Copilot Proxy instance stopped.
+OpenAI Base URL:    http://127.0.0.1:4000/v1
+Anthropic Base URL: http://127.0.0.1:4000
+```
+
+如果配置端口被其他无关进程占用，启动器不会误杀该进程，会直接报错。请手动释放端口，或者修改 `.env` 里的 `COPILOT_PROXY_PORT`。
+
+如果你不希望启动器停止上一次记录的本项目实例：
+
+```bash
+uv run copilot-proxy --no-restart-existing
 ```
 
 也可以使用仓库里的薄脚本：
@@ -145,7 +165,17 @@ print(message.content[0].text)
 
 ## 模型别名
 
-模型别名配置在 `litellm.yaml` 和 `.env.example` 中：
+模型别名配置在本地 `models.toml` 中。首次使用时从模板复制：
+
+```bash
+cp models.toml.example models.toml
+```
+
+Windows PowerShell：
+
+```powershell
+Copy-Item models.toml.example models.toml
+```
 
 | 本地模型名 | 上游模型名 |
 | --- | --- |
@@ -154,7 +184,37 @@ print(message.content[0].text)
 | `gpt-5.1-codex` | `github_copilot/gpt-5.1-codex` |
 | `text-embedding-3-small` | `github_copilot/text-embedding-3-small` |
 
-不同账号和订阅可用的 Copilot 模型可能不同。如果你的账号暴露的模型名不一样，请编辑 `litellm.yaml` 和 `COPILOT_PROXY_MODEL_ALIASES`。
+不同账号和订阅可用的 Copilot 模型可能不同。如果你的账号暴露的模型名不一样，请编辑本地 `models.toml`。
+
+示例：
+
+```toml
+[models]
+default = "gpt-4"
+
+[[models.aliases]]
+name = "gpt-4"
+upstream = "github_copilot/gpt-4"
+
+[[models.aliases]]
+name = "gpt-5.5"
+upstream = "github_copilot/gpt-5.5"
+```
+
+字段说明：
+
+- `name`：客户端请求时看到和传入的模型名
+- `upstream`：实际传给 LiteLLM 的上游模型名
+- `mode`：可选，用于标记 `responses`、`embedding` 等模型用途
+
+`.env` 仍然支持临时覆盖：
+
+```env
+COPILOT_PROXY_DEFAULT_MODEL=gpt-5.5
+COPILOT_PROXY_MODEL_ALIASES=gpt-5.5,gpt-4o
+```
+
+正常使用时更推荐维护 `models.toml`，避免模型配置散落在环境变量里。若本地 `models.toml` 不存在，程序会回退读取 `models.toml.example`，方便刚克隆仓库时直接启动。
 
 ## 验证
 

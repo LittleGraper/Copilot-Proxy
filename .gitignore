@@ -157,6 +157,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# Local Copilot Proxy configuration
+models.toml
+.copilot-proxy.pid
+
 # Spyder project settings
 .spyderproject
 .spyproject

@@ -52,7 +52,10 @@ async def healthz() -> dict[str, Any]:
 @app.get("/v1/models", dependencies=[Depends(require_api_key)])
 @app.get("/models", dependencies=[Depends(require_api_key)])
 async def models() -> dict[str, Any]:
-    return {"object": "list", "data": [model_object(alias) for alias in get_settings().aliases]}
+    return {
+        "object": "list",
+        "data": [model_object(model["name"]) for model in get_settings().model_registry()],
+    }
 
 
 @app.post("/v1/chat/completions", dependencies=[Depends(require_api_key)], response_model=None)

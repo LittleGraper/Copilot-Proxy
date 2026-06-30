@@ -53,3 +53,34 @@ def test_anthropic_route_shapes_upstream_errors(monkeypatch) -> None:
             "message": "Upstream provider request failed.",
         },
     }
+
+
+def test_models_route_uses_model_registry(monkeypatch, tmp_path) -> None:
+    config = tmp_path / "models.toml"
+    config.write_text(
+        """
+[models]
+default = "local-one"
+
+[[models.aliases]]
+name = "local-one"
+upstream = "github_copilot/upstream-one"
+
+[[models.aliases]]
+name = "local-two"
+upstream = "github_copilot/upstream-two"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("LOCAL_API_KEY", "sk-test")
+    monkeypatch.setenv("COPILOT_PROXY_MODELS_CONFIG", str(config))
+    monkeypatch.setenv("COPILOT_PROXY_DEFAULT_MODEL", "")
+    monkeypatch.setenv("COPILOT_PROXY_MODEL_ALIASES", "")
+    get_settings.cache_clear()
+
+    client = TestClient(app)
+    response = client.get("/v1/models", headers={"Authorization": "Bearer sk-test"})
+
+    assert response.status_code == 200
+    assert [model["id"] for model in response.json()["data"]] == ["local-one", "local-two"]
